@@ -1,0 +1,270 @@
+//this is the current latest code
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.*;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Scanner;
+
+public class CalorieTrackingGUI extends JFrame {
+    private JTextField weightField, heightField, ageField;
+    private JComboBox<String> genderBox, activityLevelBox, goalBox;
+    private JTextArea outputArea;
+
+    public CalorieTrackingGUI() {
+        setTitle("Calorie Tracking");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new BorderLayout(10, 10));
+
+        // Input panel for user details
+        JPanel inputPanel = new JPanel(new GridLayout(6, 2, 5, 5));
+        inputPanel.setBorder(BorderFactory.createTitledBorder("User Details"));
+
+        inputPanel.add(new JLabel("Weight (kg):"));
+        weightField = new JTextField();
+        inputPanel.add(weightField);
+
+        inputPanel.add(new JLabel("Height (m):"));
+        heightField = new JTextField();
+        inputPanel.add(heightField);
+
+        inputPanel.add(new JLabel("Age:"));
+        ageField = new JTextField();
+        inputPanel.add(ageField);
+
+        inputPanel.add(new JLabel("Gender:"));
+        genderBox = new JComboBox<>(new String[]{"Male", "Female"});
+        inputPanel.add(genderBox);
+
+        inputPanel.add(new JLabel("Activity Level:"));
+        activityLevelBox = new JComboBox<>(new String[]{
+                "Sedentary", "Lightly active", "Moderately active", "Very active", "Super active"
+        });
+        inputPanel.add(activityLevelBox);
+
+        inputPanel.add(new JLabel("Goal:"));
+        goalBox = new JComboBox<>(new String[]{"Cut", "Gain", "Maintain"});
+        inputPanel.add(goalBox);
+
+        add(inputPanel, BorderLayout.NORTH);
+
+        // Button panel for actions
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
+        JButton calculateButton = new JButton("Calculate");
+        JButton saveButton = new JButton("Save Progress");
+        JButton viewDietButton = new JButton("View Diet Plan");
+        JButton viewProgressButton = new JButton("View Progress");
+
+        buttonPanel.add(calculateButton);
+        buttonPanel.add(saveButton);
+        buttonPanel.add(viewDietButton);
+        buttonPanel.add(viewProgressButton);
+
+        add(buttonPanel, BorderLayout.CENTER);
+
+        // Output area at the bottom
+        outputArea = new JTextArea(10, 30);
+        outputArea.setEditable(false);
+        outputArea.setBorder(BorderFactory.createTitledBorder("Output"));
+        add(new JScrollPane(outputArea), BorderLayout.SOUTH);
+
+        // Add action listeners
+        calculateButton.addActionListener(new CalculateAction());
+        saveButton.addActionListener(new SaveAction());
+        viewDietButton.addActionListener(new ViewDietAction());
+        viewProgressButton.addActionListener(new ViewProgressAction());
+
+        pack();
+        setLocationRelativeTo(null);
+        setVisible(true);
+    }
+
+    private class CalculateAction implements ActionListener {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            try {
+                double weight = Double.parseDouble(weightField.getText());
+                double height = Double.parseDouble(heightField.getText());
+                int age = Integer.parseInt(ageField.getText());
+                String gender = genderBox.getSelectedItem().toString();
+                int activityLevel = activityLevelBox.getSelectedIndex() + 1;
+
+                Person person = gender.equals("Male") ? new Male(weight, height, age) : new Female(weight, height, age);
+                double bmi = person.calculateBMI();
+                double bodyFat = person.calculateBodyFat(gender);
+
+                double bmr = CalorieTracking.calculateBMR(weight, height, age, gender);
+                double tdee = CalorieTracking.calculateTDEE(bmr, activityLevel);
+                String goal = goalBox.getSelectedItem().toString().toLowerCase();
+                double suggestedCalories = CalorieTracking.suggestCalories(goal, tdee);
+
+                outputArea.setText(String.format("BMI: %.2f\nBody Fat: %.2f%%\nTDEE: %.2f\nSuggested Calories: %.2f",
+                        bmi, bodyFat, tdee, suggestedCalories));
+            } catch (Exception ex) {
+                outputArea.setText("Error: Invalid input!");
+            }
+        }
+    }
+
+    private class SaveAction implements ActionListener {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            try {
+                double weight = Double.parseDouble(weightField.getText());
+                double height = Double.parseDouble(heightField.getText());
+                int age = Integer.parseInt(ageField.getText());
+                String gender = genderBox.getSelectedItem().toString();
+                Person person = gender.equals("Male") ? new Male(weight, height, age) : new Female(weight, height, age);
+
+                double bmi = person.calculateBMI();
+                double bodyFat = person.calculateBodyFat(gender);
+                CalorieTracking.writeProgressToFile(weight, height, bmi, bodyFat);
+                outputArea.setText("Progress saved successfully!");
+            } catch (Exception ex) {
+                outputArea.setText("Error: Unable to save progress.");
+            }
+        }
+    }
+
+    private class ViewDietAction implements ActionListener {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            String goal = goalBox.getSelectedItem().toString().toLowerCase();
+            String fileName = switch (goal) {
+                case "cut" -> "CUTTING DIET PLANS.txt";
+                case "gain" -> "BULKING DIET PLANS.txt";
+                case "maintain" -> "MAINTENANCE DIET PLANS.txt";
+                default -> null;
+            };
+
+            if (fileName != null) {
+                try (Scanner scanner = new Scanner(new File(fileName))) {
+                    outputArea.setText("Diet Plan:\n");
+                    while (scanner.hasNextLine()) {
+                        outputArea.append(scanner.nextLine() + "\n");
+                    }
+                } catch (FileNotFoundException ex) {
+                    outputArea.setText("Error: Diet plan file not found.");
+                }
+            }
+        }
+    }
+
+    private class ViewProgressAction implements ActionListener {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            try (Scanner scanner = new Scanner(new File("progress.txt"))) {
+                outputArea.setText("Your Progress:\n");
+                while (scanner.hasNextLine()) {
+                    outputArea.append(scanner.nextLine() + "\n");
+                }
+            } catch (FileNotFoundException ex) {
+                outputArea.setText("No progress data found.");
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(CalorieTrackingGUI::new);
+    }
+}
+
+class InvalidInputException extends Exception {
+    public InvalidInputException(String message) {
+        super(message);
+    }
+}
+
+abstract class Person {
+    protected double weight;
+    protected double height;
+    protected int age;
+
+    public Person(double weight, double height, int age) {
+        this.weight = weight;
+        this.height = height;
+        this.age = age;
+    }
+
+    public abstract double calculateBMI();
+
+    public abstract double calculateBodyFat(String gender);
+}
+
+class Male extends Person {
+    public Male(double weight, double height, int age) {
+        super(weight, height, age);
+    }
+
+    @Override
+    public double calculateBMI() {
+        return weight / Math.pow(height, 2);
+    }
+
+    @Override
+    public double calculateBodyFat(String gender) {
+        double bmi = calculateBMI();
+        return (1.20 * bmi) + (0.23 * age) - 16.2;
+    }
+}
+
+class Female extends Person {
+    public Female(double weight, double height, int age) {
+        super(weight, height, age);
+    }
+
+    @Override
+    public double calculateBMI() {
+        return weight / Math.pow(height, 2);
+    }
+
+    @Override
+    public double calculateBodyFat(String gender) {
+        double bmi = calculateBMI();
+        return (1.20 * bmi) + (0.23 * age) - 5.4;
+    }
+}
+
+class CalorieTracking {
+
+    public static double calculateBMR(double weight, double height, int age, String gender) {
+        if (gender.equalsIgnoreCase("Male")) {
+            return 10 * weight + 6.25 * (height * 100) - 5 * age + 5;
+        } else {
+            return 10 * weight + 6.25 * (height * 100) - 5 * age - 161;
+        }
+    }
+
+    public static double calculateTDEE(double bmr, int activityLevel) {
+        double activityFactor;
+        switch (activityLevel) {
+            case 1 -> activityFactor = 1.2;
+            case 2 -> activityFactor = 1.375;
+            case 3 -> activityFactor = 1.55;
+            case 4 -> activityFactor = 1.725;
+            case 5 -> activityFactor = 1.9;
+            default -> activityFactor = 1.2;
+        }
+        return bmr * activityFactor;
+    }
+
+    public static double suggestCalories(String goal, double tdee) {
+        return switch (goal.toLowerCase()) {
+            case "cut" -> tdee - 500;
+            case "gain" -> tdee + 500;
+            default -> tdee;
+        };
+    }
+
+    public static void writeProgressToFile(double weight, double height, double bmi, double bodyFat) {
+        try (PrintWriter writer = new PrintWriter(new FileWriter("progress.txt", true))) {
+            String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+            writer.printf("%s - Weight: %.2f kg, Height: %.2f m, BMI: %.2f, Body Fat: %.2f%%\n",
+                    timestamp, weight, height, bmi, bodyFat);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
